@@ -1,0 +1,4 @@
+flask
+google-cloud-firestore
+functions-framework==3.0.0
+gunicorn
