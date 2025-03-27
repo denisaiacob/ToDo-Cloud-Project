@@ -1,4 +1,5 @@
 flask
 google-cloud-firestore
+google-cloud-bigquery
 functions-framework==3.0.0
 gunicorn
