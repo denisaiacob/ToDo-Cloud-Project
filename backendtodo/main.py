@@ -4,11 +4,62 @@ import functions_framework
 from datetime import datetime
 from flask import Request, make_response
 import json
+from google.cloud import logging
+import googlecloudprofiler
+from google.cloud import monitoring_v3
+import time
 
 # Initialize Firestore client
 credentials = service_account.Credentials.from_service_account_file("todo-454613-1b9473315763.json")
 db = firestore.Client()
 TASK_FIELD = ["completed", "created at", "description", "duedate", "task"]
+
+monitoring_client = monitoring_v3.MetricServiceClient()
+project_id = "your-gcp-project-id"
+
+def create_custom_metric(metric_type, value):
+    """Sends custom metrics to Cloud Monitoring"""
+    series = monitoring_v3.TimeSeries()
+    series.metric.type = f"custom.googleapis.com/{metric_type}"
+    series.resource.type = "global"
+
+    point = monitoring_v3.Point()
+    point.value.double_value = value
+    now = datetime.utcnow()
+    point.interval.end_time.seconds = int(now.timestamp())
+
+    series.points.append(point)
+
+    request = monitoring_v3.CreateTimeSeriesRequest(
+        name=f"projects/{project_id}",
+        time_series=[series],
+    )
+
+    monitoring_client.create_time_series(request)
+
+try:
+    googlecloudprofiler.start(
+        service="task-api-service",
+        service_version="1.0.0",
+        verbose=0  # Set to 1 for debugging
+    )
+except (ValueError, NotImplementedError) as e:
+    print(f"Profiler not started: {e}")
+
+# Initialize Cloud Logging client
+logging_client = logging.Client()
+logger = logging_client.logger("task-api-logs")
+
+def log_message(level, message, extra_data=None):
+        """Helper function to log messages to Cloud Logging."""
+        log_entry = {"message": message}
+        if extra_data:
+            log_entry.update(extra_data)
+
+        if level == "INFO":
+            logger.log_struct(log_entry, severity="INFO")
+        elif level == "ERROR":
+            logger.log_struct(log_entry, severity="ERROR")
 
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
@@ -30,6 +81,7 @@ def get_all_documents_for_db(db_name):
 
 
 def get_all_tasks(request:Request):
+    start_time = time.time()
     try:
         username = request.args.get("username")
         if not username:
@@ -47,12 +99,18 @@ def get_all_tasks(request:Request):
                 if doc_username == username:
                     task_data["task"] = actual_task_name  # Remove username from task name
                     document_list.append(task_data)
-        
+
+        duration = time.time() - start_time
+        create_custom_metric("task_api/request_duration", duration)
+
+        log_message("INFO", "Fetched tasks successfully", {"username": username, "task_count": len(document_list)})
+
         response = make_response(json.dumps(document_list), 200)
         response.headers["Content-Type"] = "application/json"
         return add_cors_headers(response)
 
     except Exception as e:
+        log_message("ERROR", f"Error fetching tasks: {str(e)}")
         return add_cors_headers(make_response(json.dumps({"error": str(e)}), 500))
 
 
