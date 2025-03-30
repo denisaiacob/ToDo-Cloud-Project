@@ -16,9 +16,14 @@ def index():
 @app.route("/notify_change", methods=["POST"])
 def notify_change():
     data = request.get_json() or {}
-    message = data.get("message", "No message provided")
-    socketio.emit("task_update", {"message": message})
-    return {"status": "ok", "broadcasted": message}
+
+    task = data.get("task")
+
+    if not task:
+        return {"error": "No task data provided"}, 400
+
+    socketio.emit("task_update", {"task": task})
+    return {"status": "ok", "broadcasted": task}
 
 @socketio.on("connect")
 def on_connect():
