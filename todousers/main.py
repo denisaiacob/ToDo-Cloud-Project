@@ -7,6 +7,10 @@ from flask import make_response, Request
 
 client = bigquery.Client()
 
+def handle_options():
+    response = make_response("", 204) 
+    return add_cors_headers(response)
+
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
@@ -19,7 +23,7 @@ def get_user_by_email(email):
     results = query_job.result()
 
     if results.total_rows == 0:
-        return {"users": 0}  # No users found
+        return {"users": 0}  
 
     users = [{"username": row.username, "password": row.password} for row in results]
     return {"users": users}
@@ -59,11 +63,12 @@ def login_user(request:Request):
 
 @functions_framework.http
 def cloud_function_entry_point(request):
-    # Get the HTTP method
-    method = request.method
     
-    # Check the URL path
+    method = request.method
     path = request.path
+
+    if method == "OPTIONS":
+        return handle_options()
 
     if path == "/insert_user" and method == 'POST':
         return insert_user(request)

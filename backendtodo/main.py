@@ -5,10 +5,13 @@ from datetime import datetime
 from flask import Request, make_response
 import json
 
-# Initialize Firestore client
 credentials = service_account.Credentials.from_service_account_file("todo-454613-1b9473315763.json")
 db = firestore.Client()
 TASK_FIELD = ["completed", "created at", "description", "duedate", "task"]
+
+def handle_options():
+    response = make_response("", 204) 
+    return add_cors_headers(response)
 
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
@@ -45,7 +48,7 @@ def get_all_tasks(request:Request):
             if "|" in task_name:
                 doc_username, actual_task_name = task_name.split("|", 1)
                 if doc_username == username:
-                    task_data["task"] = actual_task_name  # Remove username from task name
+                    task_data["task"] = actual_task_name  
                     document_list.append(task_data)
         
         response = make_response(json.dumps(document_list), 200)
@@ -123,11 +126,12 @@ def update_task(request: Request):
 
 @functions_framework.http
 def cloud_function_entry_point(request):
-    # Get the HTTP method
-    method = request.method
     
-    # Check the URL path
+    method = request.method
     path = request.path
+
+    if method == "OPTIONS":
+        return handle_options()
 
     if path == "/get_all_tasks" and method == 'GET':
         return get_all_tasks(request)
